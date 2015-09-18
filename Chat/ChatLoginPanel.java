@@ -189,6 +189,7 @@ public class ChatLoginPanel extends JPanel {
         System.out.println("We are connecting to ...");
 
         switch (_client.connect(loginName,
+                roomName,
                 keyStoreName,
                 keyStorePassword,
                 caHost,

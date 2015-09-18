@@ -67,23 +67,33 @@ public class CertificateAuthorityThread extends Thread {
 
                 CertRequest cr = (CertRequest)ois.readObject();
 
-                _outputArea.append("Received request for "+cr.username);
+                Signature signature=Signature.getInstance("SHA256withRSA");
+                signature.initVerify(cr.pubKey);
+                signature.update(cr.pubKey.getEncoded());
+                if(!signature.verify(cr.signature)){
+                    oos.writeObject(new Boolean(false));
+                    oos.writeObject("Signature is invalid!");
+                    socket.close();
+                    continue;
+                }
+
+                _outputArea.append("Received request for "+cr.username+"\n");
 
                 Boolean result = _ca.addUsername(cr.username);
 
                 if(!result){
                     oos.writeObject(new Boolean(false));
                     oos.writeObject("Username is already taken!");
+                    socket.close();
+                    continue;
                 }
-                else {
-                    X509Certificate cert = X509CertificateGenerator.generateCertificate(
-                        "CN="+cr.username,cr.pubKey,
-                        "CN=SecureChat",_ca.getPrivateKey(),
-                        "SHA256withRSA",true,true);
-                    _outputArea.append("Issuing certificate.\n");
-                    oos.writeObject(new Boolean(true));
-                    oos.writeObject(cert);
-                }
+                X509Certificate cert = X509CertificateGenerator.generateCertificate(
+                    "CN="+cr.username,cr.pubKey,
+                    "CN=SecureChat",_ca.getPrivateKey(),
+                    "SHA256withRSA",true,true);
+                _outputArea.append("Issuing certificate.\n");
+                oos.writeObject(new Boolean(true));
+                oos.writeObject(cert);
             }
         } catch (Exception e) {
             System.out.println("CA thread error: " + e.getMessage());

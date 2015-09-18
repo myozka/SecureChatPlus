@@ -8,7 +8,6 @@ import javax.crypto.spec.*;
 import javax.crypto.interfaces.*;
 import javax.xml.bind.DatatypeConverter;
 
-import java.io.Serializable;
 
 class Tools{
 
@@ -30,20 +29,46 @@ class Tools{
 
 
 
-	public static String decryptRSA(PrivateKey key,String text) throws Exception {
-		byte[] cipherText = DatatypeConverter.parseHexBinary(text);
-		byte[] plainText = null;
-		// get an RSA cipher object and print the provider
-		final Cipher cipher = Cipher.getInstance("RSA");
+    public static String decryptRSA(PrivateKey key,String text) throws Exception {
+        byte[] cipherText = DatatypeConverter.parseHexBinary(text);
+        byte[] plainText = null;
+        // get an RSA cipher object and print the provider
+        final Cipher cipher = Cipher.getInstance("RSA");
 
-		// decrypt the text using the private key
-		cipher.init(Cipher.DECRYPT_MODE, key);
-		plainText = cipher.doFinal(cipherText);
+        // decrypt the text using the private key
+        cipher.init(Cipher.DECRYPT_MODE, key);
+        plainText = cipher.doFinal(cipherText);
 
-		return new String(plainText);
-	}
+        return new String(plainText);
+    }
+/*
+    public static String decryptRSA(PrivateKey key,String text) throws Exception {
+        byte[] decbuf;
+        String toReturn="";
 
+        byte[] cipherText = DatatypeConverter.parseHexBinary(text);
+        byte[] plainText = null;
+        byte[] buffer = new byte[128];
+        // get an RSA cipher object and print the provider
+        final Cipher cipher = Cipher.getInstance("RSA");
 
+        // decrypt the text using the private key
+        cipher.init(Cipher.DECRYPT_MODE, key);
+        for(int i=0;i<cipherText.length;++i){
+            if(i>0 && (i%128 ==0)){
+                    decbuf = cipher.doFinal(buffer);
+                    toReturn = toReturn + decbuf;
+            }
+            buffer[i%128]=cipherText[i];
+            decbuf = cipher.doFinal(buffer);
+            toReturn = toReturn + new String(decbuf);
+        }
+        //plainText = cipher.doFinal(cipherText);
+
+        return new String(plainText);
+    }
+
+*/
     public static String encryptAES(String key, String data) throws Exception {
     	SecretKeySpec spec = new SecretKeySpec(key.getBytes(),"AES");
 
@@ -65,4 +90,11 @@ class Tools{
     	return new String(plainText);
     }
     
+    public static String generateNonce(){
+        SecureRandom random = new SecureRandom();
+        byte[] n = new byte[19];
+        random.nextBytes(n);
+        String _N = (new String(n))+"AliAydinRocks";
+        return _N;
+    }
 }

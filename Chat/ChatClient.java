@@ -40,6 +40,7 @@ public class ChatClient {
     public static final int BAD_HOST = 2;
     public static final int ERROR = 3;
     String _loginName;
+    String _roomName;
     ChatServer _server;
     ChatClientThread _thread;
     ChatLoginPanel _loginPanel;
@@ -52,6 +53,8 @@ public class ChatClient {
     Socket _socket = null;
     SecureRandom secureRandom;
     KeyStore clientKeyStore;
+    X509Certificate _certificate;
+    PrivateKey _privateKey;
     
     //  ChatClient Constructor
     //
@@ -136,16 +139,25 @@ public class ChatClient {
     //  The other is your authentication password on the CA.
     //
     public PrivateKey getPrivateKey(){
-        return null;
+        return _privateKey;
     }
 
-    public int connect(String loginName,String keyStoreName, char[] keyStorePassword,
+    public X509Certificate getCertificate(){
+        return _certificate;
+    }
+
+    public String getRoomName(){
+        return _roomName;
+    }
+
+    public int connect(String loginName,String roomName,String keyStoreName, char[] keyStorePassword,
             String caHost, int caPort,
             String serverHost, int serverPort) {
 
         try {
 
             _loginName = loginName;
+            _roomName = roomName;
 
             clientKeyStore = KeyStore.getInstance("JKS");
             clientKeyStore.load(null,keyStorePassword);
@@ -178,11 +190,17 @@ public class ChatClient {
                 }
 
                 KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-                kpg.initialize(1024);
+                kpg.initialize(2048);
                 KeyPair kp = kpg.genKeyPair();
 
                 ObjectOutputStream oos = new ObjectOutputStream(certSocket.getOutputStream());
-                oos.writeObject(new CertRequest(loginName,kp.getPublic()));
+                
+                Signature signature=Signature.getInstance("SHA256withRSA");
+                signature.initSign(kp.getPrivate());
+                signature.update(kp.getPublic().getEncoded());
+                byte[] signatureBytes=signature.sign();
+                
+                oos.writeObject(new CertRequest(loginName,kp.getPublic(),signatureBytes));
 
                 ObjectInputStream ois = new ObjectInputStream(certSocket.getInputStream());
                 Boolean success = (Boolean)ois.readObject();
@@ -201,11 +219,16 @@ public class ChatClient {
                 }
             }
 
+            KeyStore.PrivateKeyEntry privKeyEntry = (KeyStore.PrivateKeyEntry)clientKeyStore.getEntry(loginName,protParam);
+            _certificate = (X509Certificate)privKeyEntry.getCertificate();
+            _privateKey = privKeyEntry.getPrivateKey();
+
             // Server Connection after getting certificate
 
             _socket = new Socket(serverHost, serverPort);
             _out = new PrintWriter(_socket.getOutputStream(), true);
 
+            
             _in = new BufferedReader(new InputStreamReader(
                     _socket.getInputStream()));
 
@@ -248,17 +271,7 @@ public class ChatClient {
     //  Called from the ChatPanel when the user types a carrige return.
     public void sendMessage(String msg) {
 
-        try {
-
-            msg = _loginName + "> " + msg;
-
-            _out.println(msg);
-
-        } catch (Exception e) {
-
-            System.out.println("ChatClient err: " + e.getMessage());
-            e.printStackTrace();
-        }
+        _thread.sendMessage(msg);
 
     }
 

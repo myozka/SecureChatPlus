@@ -15,10 +15,12 @@ import javax.swing.JTextArea;
 //  Crypto
 import java.security.*;
 import java.security.spec.*;
+import java.security.cert.*;
 import java.security.interfaces.*;
 import javax.crypto.*;
 import javax.crypto.spec.*;
 import javax.crypto.interfaces.*;
+import javax.xml.bind.DatatypeConverter;
 
 public class ChatClientThread extends Thread {
 
@@ -26,6 +28,8 @@ public class ChatClientThread extends Thread {
     private JTextArea _outputArea;
     private Socket _socket = null;
     private String _roomKey;
+    private ObjectOutputStream oos;
+    private ObjectInputStream ois;
 
     public ChatClientThread(ChatClient client) {
 
@@ -44,14 +48,69 @@ public class ChatClientThread extends Thread {
                     new InputStreamReader(
                     _socket.getInputStream()));
 
-            String msg = in.readLine();
+            oos = new ObjectOutputStream(_socket.getOutputStream());
+            ois = new ObjectInputStream(_socket.getInputStream());
 
-            _roomKey = Tools.decryptRSA(_client.getPrivateKey(),msg);
+            PrivateKey mPrivateKey = _client.getPrivateKey();
+            X509Certificate clientCert = (X509Certificate)_client.getCertificate();
 
-            while ((msg = in.readLine()) != null) {
+            //round 1
+            oos.writeObject(clientCert);
+
+            //round 2
+            X509Certificate serverCert = (X509Certificate)ois.readObject();
+            String N_1 = (String)ois.readObject();
+            System.out.println("enc(n1):"+N_1);
+
+            String _N_1 = Tools.decryptRSA(mPrivateKey,N_1);
+            System.out.println("n1:"+_N_1);
 
 
-                consumeMessage(msg + " \n");
+            PublicKey sPubKey = serverCert.getPublicKey();
+            
+            FileInputStream fis = new FileInputStream("ca.cer");
+            BufferedInputStream bis = new BufferedInputStream(fis);
+            CertificateFactory cf = CertificateFactory.getInstance("X.509");
+            X509Certificate caCert = (X509Certificate)cf.generateCertificate(bis);
+            
+            try {
+                serverCert.verify(caCert.getPublicKey());
+            } catch(Exception e){
+                _socket.close();
+                return;
+            }
+
+            String resp_N_1 = Tools.encryptRSA(sPubKey,_N_1);
+            String _N_2 = Tools.generateNonce();
+            String resp_N_2 = Tools.encryptRSA(sPubKey,_N_2);
+            String resp_id_room = Tools.encryptRSA(sPubKey,_client.getRoomName());
+            
+            //round 3
+            oos.writeObject(resp_N_1);
+            oos.writeObject(resp_N_2);
+            oos.writeObject(resp_id_room);
+
+            //round 4
+            String N_2 = (String)ois.readObject();
+            String roomKey= (String)ois.readObject();
+
+            N_2 = Tools.decryptRSA(mPrivateKey,N_2);
+            if(!N_2.equals(_N_2)){
+                _socket.close();
+                return;
+            }
+
+            System.out.println(roomKey);
+            _roomKey = Tools.decryptRSA(mPrivateKey,roomKey);
+
+            _roomKey = new String(DatatypeConverter.parseHexBinary(_roomKey));
+
+            Integer seq = 0;
+            String msg;
+
+            while ((msg = (String)ois.readObject()) != null) {
+
+
             }
 
             _socket.close();
@@ -59,6 +118,25 @@ public class ChatClientThread extends Thread {
         } catch (Exception e) {
 
             e.printStackTrace();
+        }
+
+    }
+
+    public void sendMessage(String msg){
+
+        MessageBlock halfBlock = new MessageBlock("",msg,(int)System.currentTimeMillis()/1000,0);
+
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        ObjectOutputStream out = null;
+        try {
+            out = new ObjectOutputStream(bos);
+            String str = DatatypeConverter.printHexBinary(bos.toByteArray());
+            str = Tools.encryptAES(_roomKey,str);
+            String mac = Tools.hmac(_roomKey,str);
+            oos.writeObject(str);
+            oos.writeObject(mac);
+        } catch(Exception ex) {
+            return;
         }
 
     }

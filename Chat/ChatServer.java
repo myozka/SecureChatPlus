@@ -27,8 +27,8 @@ import javax.security.auth.x500.*;
 public class ChatServer {
 
     private Hashtable _clients;
-//      private Hashtable _clientsRoomA;
-//      private Hashtable _clientsRoomB;
+    private Hashtable _clientsRoomA;
+    private Hashtable _clientsRoomB;
     private int _clientID = 0;
     private int _port;
     private String _hostName = null;
@@ -39,9 +39,17 @@ public class ChatServer {
     private ServerSocket _serverSocket = null;
     private SecureRandom secureRandom;
     private KeyStore serverKeyStore;
+    private SecretKey roomA;
+    private SecretKey roomB;
 //    private KeyManagerFactory keyManagerFactory;
 //    private TrustManagerFactory trustManagerFactory;
-  
+    public SecretKey getRoomA(){
+        return roomA;
+    }
+    public SecretKey getRoomB(){
+        return roomB;
+    }
+
     public ChatServer(int port) {
 
         try {
@@ -99,6 +107,12 @@ public class ChatServer {
 
         try {
 
+            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+            keyGen.init(256); // for example
+            
+            roomA = keyGen.generateKey();
+            roomB = keyGen.generateKey();
+            
             _serverSocket = new ServerSocket(_port);
             System.out.println("ChatServer is running on "
                     + _hostName + " port " + _port);
