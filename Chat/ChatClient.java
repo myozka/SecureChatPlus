@@ -117,7 +117,6 @@ public class ChatClient {
 
         try {
             _socket.shutdownOutput();
-            _thread.join();
             _socket.close();
 
         } catch (Exception err) {

@@ -44,10 +44,6 @@ public class ChatClientThread extends Thread {
 
         try {
 
-            BufferedReader in = new BufferedReader(
-                    new InputStreamReader(
-                    _socket.getInputStream()));
-
             oos = new ObjectOutputStream(_socket.getOutputStream());
             ois = new ObjectInputStream(_socket.getInputStream());
 
@@ -60,10 +56,8 @@ public class ChatClientThread extends Thread {
             //round 2
             X509Certificate serverCert = (X509Certificate)ois.readObject();
             String N_1 = (String)ois.readObject();
-            System.out.println("enc(n1):"+N_1);
 
             String _N_1 = Tools.decryptRSA(mPrivateKey,N_1);
-            System.out.println("n1:"+_N_1);
 
 
             PublicKey sPubKey = serverCert.getPublicKey();
@@ -100,17 +94,29 @@ public class ChatClientThread extends Thread {
                 return;
             }
 
-            System.out.println(roomKey);
             _roomKey = Tools.decryptRSA(mPrivateKey,roomKey);
 
-            _roomKey = new String(DatatypeConverter.parseHexBinary(_roomKey));
-
-            Integer seq = 0;
+            Integer seq = -1;
             String msg;
 
             while ((msg = (String)ois.readObject()) != null) {
 
+                String mac = (String)ois.readObject();
+                String calculatedMac = Tools.hmac(_roomKey,msg);
+                if(!calculatedMac.equals(mac)){
+                    System.out.println("MACs doesn't match");
+                    continue;
+                }
 
+                msg = Tools.decryptAES(_roomKey,msg);
+                byte [] msgbytes=DatatypeConverter.parseHexBinary(msg);
+                ByteArrayInputStream bais = new ByteArrayInputStream(msgbytes);
+                ObjectInputStream oin = new ObjectInputStream(bais);
+                MessageBlock currentBlock = (MessageBlock)oin.readObject();
+                if(currentBlock.sequenceNo < seq)
+                    continue;
+                seq = currentBlock.sequenceNo;
+                _outputArea.append(currentBlock.username+ "> "+currentBlock.message);
             }
 
             _socket.close();
@@ -130,6 +136,7 @@ public class ChatClientThread extends Thread {
         ObjectOutputStream out = null;
         try {
             out = new ObjectOutputStream(bos);
+            out.writeObject(halfBlock);
             String str = DatatypeConverter.printHexBinary(bos.toByteArray());
             str = Tools.encryptAES(_roomKey,str);
             String mac = Tools.hmac(_roomKey,str);

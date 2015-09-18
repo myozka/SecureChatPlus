@@ -39,22 +39,25 @@ public class ChatServer {
     private ServerSocket _serverSocket = null;
     private SecureRandom secureRandom;
     private KeyStore serverKeyStore;
-    private SecretKey roomA;
-    private SecretKey roomB;
+    private String roomA;
+    private String roomB;
+    static Integer seqNo;
 //    private KeyManagerFactory keyManagerFactory;
 //    private TrustManagerFactory trustManagerFactory;
-    public SecretKey getRoomA(){
+    public String getRoomA(){
         return roomA;
     }
-    public SecretKey getRoomB(){
+    public String getRoomB(){
         return roomB;
     }
 
     public ChatServer(int port) {
 
         try {
-
+            seqNo = new Integer(0);
             _clients = new Hashtable();
+            _clientsRoomA = new Hashtable();
+            _clientsRoomB = new Hashtable();
             _serverSocket = null;
             _clientID = -1;
             _port = port;
@@ -87,7 +90,7 @@ public class ChatServer {
 
         } catch (NumberFormatException e) {
 
-            System.out.println("Useage: java ChatServer host portNum");
+            System.out.println("Usage: java ChatServer host portNum");
             e.printStackTrace();
             return;
 
@@ -106,12 +109,13 @@ public class ChatServer {
     public void run() {
 
         try {
-
-            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
-            keyGen.init(256); // for example
             
-            roomA = keyGen.generateKey();
-            roomB = keyGen.generateKey();
+            SecureRandom random = new SecureRandom();
+            byte[] n = new byte[32];
+            random.nextBytes(n);
+            roomA = new String(n);
+            random.nextBytes(n);
+            roomB = new String(n);
             
             _serverSocket = new ServerSocket(_port);
             System.out.println("ChatServer is running on "
@@ -120,9 +124,7 @@ public class ChatServer {
             while (true) {
 
                 Socket socket = _serverSocket.accept();
-                ClientRecord clientRecord = new ClientRecord(socket);
-                _clients.put(new Integer(_clientID++), clientRecord);
-                ChatServerThread thread = new ChatServerThread(this, socket);
+                ChatServerThread thread = new ChatServerThread(this, socket, new ObjectOutputStream(socket.getOutputStream()));
                 thread.start();
             }
 
@@ -141,8 +143,15 @@ public class ChatServer {
         }
     }
 
-    public Hashtable getClientRecords() {
+    public void addClient(String room_id,ClientRecord clientRecord){
+        if(room_id.equals("To be"))
+            _clientsRoomA.put(new Integer(_clientID++), clientRecord);
+        else _clientsRoomB.put(new Integer(_clientID++), clientRecord);
+    }
 
-        return _clients;
+    public Hashtable getClientRecords(String room_id) {
+        if(room_id.equals("To be"))
+            return _clientsRoomA;
+        else return _clientsRoomB;
     }
 }

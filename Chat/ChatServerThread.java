@@ -29,7 +29,10 @@ public class ChatServerThread extends Thread {
     private Socket _socket = null;
     private ChatServer _server = null;
     private Hashtable _records = null;
-    
+    private String _roomKey = null;
+    private ObjectOutputStream oos;
+    private ObjectInputStream ois;
+
     public static String encode(String key, String data) throws Exception {
         Mac sha256_HMAC = Mac.getInstance("HmacSHA256");
         SecretKeySpec secret_key = new SecretKeySpec(key.getBytes(), "HmacSHA256");
@@ -38,20 +41,18 @@ public class ChatServerThread extends Thread {
         return DatatypeConverter.printHexBinary(sha256_HMAC.doFinal(data.getBytes()));
     }
 
-    public ChatServerThread(ChatServer server, Socket socket) {
+    public ChatServerThread(ChatServer server, Socket socket, ObjectOutputStream oos) {
 
         super("ChatServerThread");
         _server = server;
         _socket = socket;
-        _records = server.getClientRecords();
+        this.oos = oos;
     }
 
     public void run() {
 
         try {
-
-            ObjectOutputStream oos = new ObjectOutputStream(_socket.getOutputStream());
-            ObjectInputStream ois = new ObjectInputStream(_socket.getInputStream());
+            ois = new ObjectInputStream(_socket.getInputStream());
 
             //round 1
             X509Certificate clientCert = (X509Certificate)ois.readObject();
@@ -84,7 +85,7 @@ public class ChatServerThread extends Thread {
             PrivateKey sPrivateKey = privKeyEntry.getPrivateKey();
 
             PublicKey cPubKey = clientCert.getPublicKey(); // client public key
-
+            String clientName = clientCert.getSubjectX500Principal().getName().substring(3);
             //round 2
             oos.writeObject(serverCert);
 
@@ -105,71 +106,84 @@ public class ChatServerThread extends Thread {
             }
             inN_2 = Tools.decryptRSA(sPrivateKey,inN_2);
             inid_room = Tools.decryptRSA(sPrivateKey,inid_room);
-            
-            //round 4
 
-            System.out.println(DatatypeConverter.printHexBinary(_server.getRoomA().getEncoded()));
+            //round 4
 
             String resproomKey="";
             if(inid_room.equals("To be"))
-                resproomKey = Tools.encryptRSA(cPubKey,DatatypeConverter.printHexBinary(_server.getRoomA().getEncoded()));
+                resproomKey = _server.getRoomA();
             else
-                resproomKey = Tools.encryptRSA(cPubKey,DatatypeConverter.printHexBinary(_server.getRoomB().getEncoded()));
+                resproomKey = _server.getRoomB();
+            
+            _roomKey = resproomKey;
 
+            resproomKey = Tools.encryptRSA(cPubKey,resproomKey);
             String resp_N_2 = Tools.encryptRSA(cPubKey,inN_2);
 
             oos.writeObject(resp_N_2);
             oos.writeObject(resproomKey);
 
-            BufferedReader in = new BufferedReader(
-                    new InputStreamReader(
-                    _socket.getInputStream()));
+            _server.addClient(inid_room,new ClientRecord(_socket,oos));
 
-            Object receivedObj;
+            String receivedMessageBlockString;
 
 
-            while ((receivedObj = ois.readObject()) != null) {
+            while ((receivedMessageBlockString = (String)ois.readObject()) != null) {
 
-                Enumeration theClients = _records.elements();
+                //taking input 
+                String rmbs = receivedMessageBlockString;
+                String macRmbs = (String)ois.readObject();
+                //calcualte and comapre MAC
+                String calculatedMac = Tools.hmac(_roomKey,rmbs);
+                if(!calculatedMac.equals(macRmbs)){
+                    System.out.println("MACs doesn't match");
+                    continue;
+                }
+                //Get decrypted messageblock 
+                String object = Tools.decryptAES(_roomKey,rmbs);
+                ByteArrayInputStream bais = new ByteArrayInputStream(DatatypeConverter.parseHexBinary(object));
+                ObjectInputStream str = new ObjectInputStream(bais);
+                //edit the content
+                MessageBlock mb = (MessageBlock) str.readObject();
+                str.close();
+                bais.close();
+                mb.username = clientName;
+                mb.sequenceNo = _server.seqNo;
+                mb.timestamp = new Integer((int)System.currentTimeMillis()/1000);
+                _server.seqNo++;
+
+                ByteArrayOutputStream bos = new ByteArrayOutputStream();
+                ObjectOutputStream ostr = null;
+                ostr = new ObjectOutputStream(bos);
+                ostr.writeObject(mb);
+                String toSend = DatatypeConverter.printHexBinary(bos.toByteArray());
+                toSend = Tools.encryptAES(_roomKey,toSend);
+                String toSendMac = Tools.hmac(_roomKey,toSend);
+
+                Enumeration theClients = _server.getClientRecords(inid_room).elements();
 
                 while (theClients.hasMoreElements()) {
 
                     ClientRecord c = (ClientRecord) theClients.nextElement();
 
+                    try{
+                        ObjectOutputStream out = c.getObjectOutputStream();
 
-                    Socket socket = c.getClientSocket();
-
-                    ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
-                    out.writeObject(receivedObj);
-
-                }
-            }
-            /*
-            while ((receivedMsg = in.readLine()) != null) {
-
-                Enumeration theClients = _records.elements();
-
-                while (theClients.hasMoreElements()) {
-
-                    ClientRecord c = (ClientRecord) theClients.nextElement();
-
-
-                    Socket socket = c.getClientSocket();
-
-                    PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-                    out.println(receivedMsg);
+                        out.writeObject(toSend);
+                        out.writeObject(toSendMac);    
+                    } catch(Exception e){
+                        continue;
+                    }
 
                 }
             }
-            */
+           
             _socket.shutdownInput();
             _socket.shutdownOutput();
             _socket.close();
 
         } catch (Exception e) {
 
-            e.printStackTrace();
         }
-        System.out.println("kapandi");
     }
 }

@@ -21,14 +21,18 @@ import javax.crypto.interfaces.*;
 public class ClientRecord {
 
     Socket _socket = null;
+    ObjectOutputStream _oos = null;
 
-    public ClientRecord(Socket socket) {
-
+    public ClientRecord(Socket socket,ObjectOutputStream oos) {
         _socket = socket;
+        _oos = oos;
     }
 
     public Socket getClientSocket() {
-
         return _socket;
+    }
+
+    public ObjectOutputStream getObjectOutputStream() {
+        return _oos;
     }
 }

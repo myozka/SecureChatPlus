@@ -1,5 +1,7 @@
 package Chat;
 
+import java.util.*;
+
 import java.security.*;
 import java.security.spec.*;
 import java.security.interfaces.*;
@@ -13,7 +15,8 @@ class Tools{
 
     public static String hmac(String key, String data) throws Exception {
     	Mac sha256_HMAC = Mac.getInstance("HmacSHA256");
-    	SecretKeySpec secret_key = new SecretKeySpec(key.getBytes(), "HmacSHA256");
+        byte[] k = Arrays.copyOfRange(key.getBytes(),0,16);
+    	SecretKeySpec secret_key = new SecretKeySpec(k, "HmacSHA256");
     	sha256_HMAC.init(secret_key);
 
     	return DatatypeConverter.printHexBinary(sha256_HMAC.doFinal(data.getBytes()));
@@ -70,7 +73,8 @@ class Tools{
 
 */
     public static String encryptAES(String key, String data) throws Exception {
-    	SecretKeySpec spec = new SecretKeySpec(key.getBytes(),"AES");
+        byte[] k = Arrays.copyOfRange(key.getBytes(),0,16);
+    	SecretKeySpec spec = new SecretKeySpec(k,"AES");
 
     	byte[] cipherText = null;
 		final Cipher cipher = Cipher.getInstance("AES");
@@ -80,9 +84,10 @@ class Tools{
     }
 
     public static String decryptAES(String key, String data) throws Exception {
-    	SecretKeySpec spec = new SecretKeySpec(key.getBytes(),"AES");
+        byte[] k = Arrays.copyOfRange(key.getBytes(),0,16);
+    	SecretKeySpec spec = new SecretKeySpec(k,"AES");
 
-    	byte[] cipherText = DatatypeConverter.parseHexBinary(key);
+    	byte[] cipherText = DatatypeConverter.parseHexBinary(data);
     	byte[] plainText = null;
 		final Cipher cipher = Cipher.getInstance("AES");
 		cipher.init(Cipher.DECRYPT_MODE, spec);
